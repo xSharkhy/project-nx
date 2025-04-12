@@ -1,0 +1,26 @@
+{
+  "name": "project-nx",
+  "version": "1.0.0",
+  "description": "Nintendo Switch prize tracker.",
+  "author": "Ismael Morejón <ismamoreblas@gmail.com>",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node --env-file=.env src/server.js"
+  },
+  "keywords": [
+    "nintendo",
+    "switch",
+    "tracker",
+    "nodejs"
+  ],
+  "license": "ISC",
+  "dependencies": {
+    "express": "^5.1.0",
+    "grammy": "^1.35.1"
+  },
+  "devDependencies": {
+    "standard": "^17.1.2"
+  }
+}
