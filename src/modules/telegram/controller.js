@@ -1,35 +1,4 @@
-import telegramBot from './entities/bot.entity.js'
-
-/**
- * Inicializa el bot de Telegram con el token de las variables de entorno
- * @returns {Boolean} - Indica si la inicialización fue exitosa
- */
-export function initBot () {
-  const token = process.env.TELEGRAM_TOKEN
-  if (!token) {
-    console.error(
-      'TELEGRAM_TOKEN no está configurado en las variables de entorno'
-    )
-    return false
-  }
-
-  const initialized = telegramBot.initialize(token)
-  if (initialized) {
-    const bot = telegramBot.getInstance()
-
-    // Configuración básica del bot
-    bot.on('message', ctx => {
-      ctx.reply('Hello!')
-    })
-
-    // Iniciar el bot
-    bot.start()
-    console.log('Bot de Telegram inicializado correctamente')
-    return true
-  }
-
-  return false
-}
+import { sendBotMessage, isBotInitialized } from './services/telegram.service.js'
 
 /**
  * Envía un mensaje de prueba a través del bot de Telegram
@@ -41,17 +10,15 @@ export async function sendTestMessage (chatId) {
     return { statusCode: 400, body: { error: 'chatId is required' } }
   }
 
-  if (!telegramBot.isInitialized()) {
+  if (!isBotInitialized()) {
     return { statusCode: 500, body: { error: 'Bot no inicializado' } }
   }
 
-  try {
-    await telegramBot
-      .getInstance()
-      .api.sendMessage(chatId, 'Hello from the server!')
+  const success = await sendBotMessage(chatId, 'Hello from the server!')
+
+  if (success) {
     return { statusCode: 200, body: { message: 'Message sent!' } }
-  } catch (error) {
-    console.error('Error sending message:', error)
+  } else {
     return { statusCode: 500, body: { error: 'Failed to send message' } }
   }
 }
@@ -70,15 +37,15 @@ export async function sendMessage (chatId, message) {
     }
   }
 
-  if (!telegramBot.isInitialized()) {
+  if (!isBotInitialized()) {
     return { statusCode: 500, body: { error: 'Bot no inicializado' } }
   }
 
-  try {
-    await telegramBot.getInstance().api.sendMessage(chatId, message)
+  const success = await sendBotMessage(chatId, message)
+
+  if (success) {
     return { statusCode: 200, body: { message: 'Message sent!' } }
-  } catch (error) {
-    console.error('Error sending message:', error)
+  } else {
     return { statusCode: 500, body: { error: 'Failed to send message' } }
   }
 }

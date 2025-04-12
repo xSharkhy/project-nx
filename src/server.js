@@ -1,5 +1,5 @@
 import e from 'express'
-import { initBot } from './modules/telegram/controller.js'
+import { initBot } from './modules/telegram/services/telegram.service.js'
 import telegramRoutes from './modules/telegram/routes.js'
 
 const app = e()
