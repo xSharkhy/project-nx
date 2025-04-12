@@ -1,4 +1,4 @@
-import log from '../utils/logger.util.js'
+import log from '../utils/console.util.js'
 import ControlledError from './error.service.js'
 
 const HTTP_METHODS = {
