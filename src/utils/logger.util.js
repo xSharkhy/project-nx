@@ -10,6 +10,9 @@ const __dirname = path.dirname(__filename)
 // Path to the logs directory (at project root)
 const logsDir = path.join(__dirname, '..', '..', 'logs')
 
+// Main application log file
+const APP_LOG_FILE = path.join(logsDir, 'application.log')
+
 // Ensure logs directory exists
 if (!fs.existsSync(logsDir)) {
   fs.mkdirSync(logsDir, { recursive: true })
@@ -41,9 +44,6 @@ export function createLogger (moduleName, options = {}) {
 
   const minLevel = LOG_LEVELS[level] ? LOG_LEVELS[level].priority : LOG_LEVELS.INFO.priority
 
-  // Create log filename based on module name
-  const logFileName = path.join(logsDir, `${moduleName.replace(/[^a-z0-9]/gi, '-')}.log`)
-
   /**
    * Write a log message to file
    * @param {String} level - Log level
@@ -53,9 +53,9 @@ export function createLogger (moduleName, options = {}) {
     if (!logToFile) return
 
     const timestamp = formatDate(new Date(), 'YYYY-MM-DD HH:mm:ss.SSS')
-    const logLine = `[${timestamp}] [${level}] ${message}\n`
+    const logLine = `[${timestamp}] [${level}] [${moduleName}] ${message}\n`
 
-    fs.appendFile(logFileName, logLine, (err) => {
+    fs.appendFile(APP_LOG_FILE, logLine, (err) => {
       if (err) {
         console.error(`Error writing to log file: ${err.message}`)
       }

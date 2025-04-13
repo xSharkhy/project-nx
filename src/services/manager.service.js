@@ -1,5 +1,8 @@
 import log from '../utils/console.util.js'
 import ControlledError from './error.service.js'
+import { createLogger } from '../utils/logger.util.js'
+
+const logger = createLogger('manager-service')
 
 const HTTP_METHODS = {
   get: 'query',
@@ -28,6 +31,10 @@ export default async function execute (req, res, entity, functionName, params) {
   let args = null
 
   try {
+    const clientIP = req.headers['x-forwarded-for'] || req.socket.remoteAddress
+    const requestUrl = `${req.method} ${req.originalUrl}`
+
+    logger.info(`Request started: ${requestUrl} from ${clientIP}`)
     log(2, entity, functionName, 'Starting execution...')
 
     const controller = await import(`../modules/${entity}/controller.js`)
@@ -54,20 +61,24 @@ export default async function execute (req, res, entity, functionName, params) {
     }
 
     log(2, entity, functionName, 'Execution completed successfully.')
+    logger.info(`Request finished: ${requestUrl} - Status: ${response.statusCode}`)
 
     return res.status(response.statusCode).send(response)
   } catch (error) {
     try {
       if (error instanceof ControlledError) {
         log(3, 'Manager', 'Controlled Error', `Execution failed: ${error.message}`)
+        logger.warn(`Request failed: ${req.method} ${req.originalUrl} - ${error.statusCode} - ${error.message}`)
         return res.status(error.statusCode).send({ message: error.message })
       } else {
         log(4, 'Manager', 'Unexpected Error', `Execution failed: ${error.message}`)
+        logger.error(`Request error: ${req.method} ${req.originalUrl} - ${error.message}`)
         console.debug(error.stack)
         return res.status(500).send({ statusCode: error.statusCode, message: 'Internal server error.' })
       }
     } catch (innerError) {
       log(5, 'Manager', 'Manager Error Handler', `Error handling failed: ${innerError.message}`)
+      logger.error(`Error handling failed: ${innerError.message}`)
       console.debug(innerError.stack)
       return res.status(500).send({ message: 'Internal server error.' })
     }
