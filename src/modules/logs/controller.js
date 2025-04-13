@@ -36,58 +36,52 @@ export async function getLogs (chatId, level, module, date, lines, logName) {
     logger.warn(`Unauthorized access attempt with chat ID: ${chatId}`)
     throw new ControlledError('Unauthorized access', 403)
   }
+  // Check if application log file exists
+  if (!fs.existsSync(APP_LOG_FILE)) {
+    logger.warn('Application log file not found')
+    return { statusCode: 404, body: { error: 'Log file not found' } }
+  }
 
-  try {
-    // Check if application log file exists
-    if (!fs.existsSync(APP_LOG_FILE)) {
-      logger.warn('Application log file not found')
-      return { statusCode: 404, body: { error: 'Log file not found' } }
+  // Read file content
+  const content = fs.readFileSync(APP_LOG_FILE, 'utf8')
+
+  // Split content into lines for filtering
+  let linesArray = content.split('\n').filter(line => line.trim() !== '')
+
+  // Apply filters if provided
+  if (level) {
+    linesArray = linesArray.filter(line => line.includes(`[${level}]`))
+  }
+
+  if (module) {
+    linesArray = linesArray.filter(line => line.includes(`[${module}]`))
+  }
+
+  if (date) {
+    linesArray = linesArray.filter(line => line.includes(date))
+  }
+
+  // Limit number of lines if needed
+  if (lines && !isNaN(parseInt(lines))) {
+    linesArray = linesArray.slice(-parseInt(lines))
+  }
+
+  // Stats about the log file
+  const stats = fs.statSync(APP_LOG_FILE)
+  const fileInfo = {
+    size: stats.size,
+    lastModified: stats.mtime,
+    totalLines: content.split('\n').filter(line => line.trim() !== '').length,
+    filteredLines: linesArray.length
+  }
+
+  logger.info(`Log file retrieved with ${linesArray.length} lines`)
+  return {
+    statusCode: 200,
+    body: {
+      filename: 'application.log',
+      fileInfo,
+      content: linesArray.join('\n')
     }
-
-    // Read file content
-    const content = fs.readFileSync(APP_LOG_FILE, 'utf8')
-
-    // Split content into lines for filtering
-    let linesArray = content.split('\n').filter(line => line.trim() !== '')
-
-    // Apply filters if provided
-    if (level) {
-      linesArray = linesArray.filter(line => line.includes(`[${level}]`))
-    }
-
-    if (module) {
-      linesArray = linesArray.filter(line => line.includes(`[${module}]`))
-    }
-
-    if (date) {
-      linesArray = linesArray.filter(line => line.includes(date))
-    }
-
-    // Limit number of lines if needed
-    if (lines && !isNaN(parseInt(lines))) {
-      linesArray = linesArray.slice(-parseInt(lines))
-    }
-
-    // Stats about the log file
-    const stats = fs.statSync(APP_LOG_FILE)
-    const fileInfo = {
-      size: stats.size,
-      lastModified: stats.mtime,
-      totalLines: content.split('\n').filter(line => line.trim() !== '').length,
-      filteredLines: linesArray.length
-    }
-
-    logger.info(`Log file retrieved with ${linesArray.length} lines`)
-    return {
-      statusCode: 200,
-      body: {
-        filename: 'application.log',
-        fileInfo,
-        content: linesArray.join('\n')
-      }
-    }
-  } catch (error) {
-    logger.error(`Error retrieving logs: ${error.message}`)
-    throw new ControlledError('Error retrieving logs', 500)
   }
 }

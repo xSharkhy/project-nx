@@ -3,29 +3,22 @@ import ControlledError from '../../services/error.service.js'
 import log from '../../utils/console.util.js'
 
 export async function getByRequest (url) {
-  try {
-    log(1, 'EXTRACTOR', 'getByRequest', `Extracting content from ${url} using fetch`)
+  log(1, 'EXTRACTOR', 'getByRequest', `Extracting content from ${url} using fetch`)
 
-    const response = await getResponse(url)
+  const response = await getResponse(url)
 
-    if (!response) {
-      throw new ControlledError('Failed to fetch URL or timed out', 400)
-    }
+  if (!response) {
+    throw new ControlledError('Failed to fetch URL or timed out', 400)
+  }
 
-    const contentType = response.headers.get('content-type')
+  const contentType = response.headers.get('content-type')
 
-    // Handle different content types
-    if (contentType && contentType.includes('application/json')) {
-      return await response.json()
-    } else {
-      // For HTML and other text-based content
-      return await response.text()
-    }
-  } catch (error) {
-    log(3, 'EXTRACTOR', 'getByRequest', `Error: ${error.message}`)
-    throw error instanceof ControlledError
-      ? error
-      : new ControlledError(`Failed to extract content: ${error.message}`, 500)
+  // Handle different content types
+  if (contentType && contentType.includes('application/json')) {
+    return await response.json()
+  } else {
+    // For HTML and other text-based content
+    return await response.text()
   }
 }
 
@@ -40,30 +33,23 @@ export async function getByScraper (url) {
  * @returns {Object} - Response with availability status
  */
 export async function checkNSW2AmznFrAvailability (url = 'https://amzn.eu/d/ioGRpBq') {
-  try {
-    log(1, 'EXTRACTOR', 'checkNSW2AmznFrAvailability', `Checking NSW2 availability at ${url}`)
+  log(1, 'EXTRACTOR', 'checkNSW2AmznFrAvailability', `Checking NSW2 availability at ${url}`)
 
-    const content = await getByRequest(url)
+  const content = await getByRequest(url)
 
-    // Check for unavailability messages in the content
-    const unavailablePatterns = [
-      'Actuellement indisponible.',
-      'Currently Unavailable.'
-    ]
+  // Check for unavailability messages in the content
+  const unavailablePatterns = [
+    'Actuellement indisponible.',
+    'Currently Unavailable.'
+  ]
 
-    const isUnavailable = unavailablePatterns.some(pattern =>
-      content.includes(pattern)
-    )
+  const isUnavailable = unavailablePatterns.some(pattern =>
+    content.includes(pattern)
+  )
 
-    if (isUnavailable) {
-      return { message: 'NSW2 is still not available', available: false }
-    } else {
-      return { available: true }
-    }
-  } catch (error) {
-    log(3, 'EXTRACTOR', 'checkNSW2AmznFrAvailability', `Error: ${error.message}`)
-    throw error instanceof ControlledError
-      ? error
-      : new ControlledError(`Failed to check NSW2 availability: ${error.message}`, 500)
+  if (isUnavailable) {
+    return { message: 'NSW2 is still not available', available: false }
+  } else {
+    return { available: true }
   }
 }
