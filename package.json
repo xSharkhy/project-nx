@@ -18,7 +18,8 @@
   "license": "ISC",
   "dependencies": {
     "express": "^5.1.0",
-    "grammy": "^1.35.1"
+    "grammy": "^1.35.1",
+    "playwright": "^1.51.1"
   },
   "devDependencies": {
     "standard": "^17.1.2"
