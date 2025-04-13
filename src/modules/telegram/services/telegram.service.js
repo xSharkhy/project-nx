@@ -5,7 +5,8 @@ import {
   setupHelpCommandListener,
   setupPingCommandListener,
   setupMediaListener,
-  setupSeeNSW2CommandListener
+  setupSeeNSW2CommandListener,
+  setupCronSeeNSW2CommandListener
 } from '../utils/bot-listeners.utils.js'
 
 /**
@@ -30,7 +31,8 @@ export function initBot () {
     setupHelpCommandListener(bot)
     setupPingCommandListener(bot)
     setupMediaListener(bot)
-    setupSeeNSW2CommandListener(bot) // Registrar el nuevo listener
+    setupSeeNSW2CommandListener(bot)
+    setupCronSeeNSW2CommandListener(bot) // Registrar el nuevo listener de monitoreo
     // setupMessageListener(bot)
 
     // Iniciar el bot

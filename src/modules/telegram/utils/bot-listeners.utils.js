@@ -8,6 +8,9 @@ import { checkNSW2AmznFrAvailability } from '../../extractor/controller.js'
 
 const logger = createLogger('bot-listeners')
 
+// Store for active scheduled tasks with chat IDs as keys
+const activeCronTasks = new Map()
+
 /**
  * Configura el listener para los mensajes de texto
  * @param {Object} bot - Instancia del bot de Telegram
@@ -51,6 +54,8 @@ export function setupHelpCommandListener (bot) {
       '/ping - Verificar si el bot está activo\n' +
       '/status - Ver el estado del servidor\n' +
       '/seensw2 - Comprobar disponibilidad de NSW2 en Amazon Francia\n' +
+      '/cronseensw2 - Programar comprobaciones automáticas cada 5 minutos\n' +
+      '/stopcron - Detener las comprobaciones automáticas\n' +
       '/info - Información sobre el bot'
     )
   })
@@ -80,6 +85,7 @@ export function setupSeeNSW2CommandListener (bot) {
     // Obtener el argumento (posible URL) que viene después del comando
     const args = ctx.message.text.split(' ')
     const url = args.length > 1 ? args[1].trim() : null
+    const defaultUrl = 'https://amzn.eu/d/ioGRpBq'
 
     logger.info(`Comando /seensw2 recibido de ${username}${url ? ` con URL: ${url}` : ''}`)
 
@@ -89,31 +95,247 @@ export function setupSeeNSW2CommandListener (bot) {
       return
     }
 
+    const targetUrl = url || defaultUrl
     await ctx.reply(`Comprobando disponibilidad de NSW2 ${url ? 'en la URL proporcionada' : 'en Amazon Francia'}... Espere un momento.`)
 
     try {
-      // Pasar la URL a la función si existe
-      const result = await checkNSW2AmznFrAvailability(url)
+      // Primero comprobar disponibilidad mediante getByRequest
+      const { available, message } = await checkNSW2AmznFrAvailability(targetUrl)
 
-      if (result.available) {
-        await ctx.reply(`¡NSW2 está disponible${url ? ' en la URL proporcionada' : ' en Amazon Francia'}! Enviando captura de pantalla...`)
+      // Independientemente del resultado, tomar captura de pantalla
+      await ctx.reply(`Tomando captura de pantalla de ${url ? 'la URL proporcionada' : 'Amazon Francia'}...`)
 
-        if (result.screenshotBuffer) {
-          // Usar el buffer directamente con InputFile
-          await ctx.replyWithPhoto(new InputFile(result.screenshotBuffer, 'NSW2_screenshot.png'), {
-            caption: `NSW2 disponible ${url ? 'en la URL proporcionada' : 'en Amazon Francia'}`
-          })
-        } else {
-          await ctx.reply('No se pudo generar la captura de pantalla, pero el producto parece estar disponible.')
-        }
+      // Tomar captura de pantalla directamente
+      const { getByScraper } = await import('../../extractor/controller.js')
+      const screenshotResult = await getByScraper(targetUrl)
+
+      // Enviar mensaje sobre disponibilidad
+      await ctx.reply(`Resultado: ${message}`)
+
+      // Enviar captura de pantalla
+      if (screenshotResult.screenshotBuffer) {
+        await ctx.replyWithPhoto(new InputFile(screenshotResult.screenshotBuffer, 'NSW2_screenshot.png'), {
+          caption: `Estado: ${available ? 'Disponible' : 'No disponible'} ${url ? 'en la URL proporcionada' : 'en Amazon Francia'}`
+        })
       } else {
-        await ctx.reply(`NSW2 aún no está disponible${url ? ' en la URL proporcionada' : ' en Amazon Francia'}. Te avisaré cuando esté disponible.`)
+        await ctx.reply('No se pudo generar la captura de pantalla.')
       }
     } catch (error) {
-      logger.error(`Error al comprobar disponibilidad: ${error.message}`)
-      await ctx.reply('Ocurrió un error al comprobar la disponibilidad de NSW2. Inténtalo de nuevo más tarde.')
+      logger.error(`Error al procesar comando /seensw2: ${error.message}`)
+      await ctx.reply('Ocurrió un error al procesar tu solicitud. Inténtalo de nuevo más tarde.')
     }
   })
+}
+
+/**
+ * Configura el listener para el comando /cronseensw2
+ * @param {Object} bot - Instancia del bot de Telegram
+ */
+export function setupCronSeeNSW2CommandListener (bot) {
+  bot.command('cronseensw2', async (ctx) => {
+    const chatId = ctx.chat.id
+    const username = ctx.message.from.username || ctx.message.from.first_name
+    // Obtener el argumento (posible URL) que viene después del comando
+    const args = ctx.message.text.split(' ')
+    const url = args.length > 1 ? args[1].trim() : null
+    const defaultUrl = 'https://amzn.eu/d/ioGRpBq'
+
+    // Validación básica de URL (si existe)
+    if (url && !isValidUrl(url)) {
+      await ctx.reply('La URL proporcionada no parece válida. Formato: /cronseensw2 [URL opcional]')
+      return
+    }
+
+    const targetUrl = url || defaultUrl
+
+    // Verificar si ya hay una tarea programada para este chat
+    if (activeCronTasks.has(chatId)) {
+      await ctx.reply('Ya hay una tarea de monitoreo activa. Usa /stopcron para detenerla antes de iniciar una nueva.')
+      return
+    }
+
+    logger.info(`Comando /cronseensw2 recibido de ${username}${url ? ` con URL: ${targetUrl}` : ''}`)
+    await ctx.reply(`Iniciando monitoreo automático de NSW2 ${url ? 'en la URL proporcionada' : 'en Amazon Francia'} cada 2 minutos.`)
+
+    // Configurar el estado inicial antes de la primera comprobación
+    activeCronTasks.set(chatId, {
+      targetUrl,
+      lastStatus: null,
+      checkCount: 0,
+      startTime: new Date()
+    })
+
+    // Función para realizar la comprobación periódica
+    const checkAvailability = async () => {
+      try {
+        // Verificar que la tarea sigue existiendo (podría haber sido cancelada)
+        if (!activeCronTasks.has(chatId)) {
+          logger.info(`Comprobación cancelada para el chat ${chatId} porque la tarea ya no existe`)
+          return
+        }
+
+        logger.info(`Ejecutando comprobación programada para el chat ${chatId}`)
+        const { available, message } = await checkNSW2AmznFrAvailability(targetUrl)
+
+        // Obtener la información de la tarea
+        const taskInfo = activeCronTasks.get(chatId)
+
+        // Si por alguna razón no existe la tarea, salir
+        if (!taskInfo) {
+          logger.error(`No se encontró información de la tarea para el chat ${chatId}`)
+          return
+        }
+
+        // Incrementar el contador de comprobaciones
+        taskInfo.checkCount++
+
+        const isFirstCheck = taskInfo.lastStatus === null
+        const statusChanged = taskInfo.lastStatus !== available
+
+        // Log para depurar el estado
+        logger.info(`Chat ${chatId} - Check #${taskInfo.checkCount}: lastStatus=${taskInfo.lastStatus}, current=${available}, changed=${statusChanged}`)
+
+        // Calcular tiempo desde inicio para forzar capturas periódicas
+        const currentTime = new Date()
+        const minutesSinceStart = Math.floor((currentTime - taskInfo.startTime) / (60 * 1000))
+
+        // Variable para controlar si ya se tomó una captura en esta iteración
+        let screenshotTaken = false
+
+        if (isFirstCheck || statusChanged) {
+          await ctx.reply(`Actualización de estado: ${message}`)
+
+          // Tomar captura de pantalla
+          const { getByScraper } = await import('../../extractor/controller.js')
+          const screenshotResult = await getByScraper(targetUrl)
+
+          // Enviar captura
+          if (screenshotResult.screenshotBuffer) {
+            await ctx.replyWithPhoto(new InputFile(screenshotResult.screenshotBuffer, 'NSW2_screenshot.png'), {
+              caption: `Estado: ${available ? 'Disponible' : 'No disponible'} ${url ? 'en la URL proporcionada' : 'en Amazon Francia'}`
+            })
+            screenshotTaken = true
+          }
+
+          // Si está disponible, enviar notificación especial
+          if (available && statusChanged) {
+            await ctx.reply('🚨 ¡ALERTA! 🚨 NSW2 ahora está DISPONIBLE. Revisa rápidamente la disponibilidad.')
+          }
+        } else {
+          // Enviar actualizaciones periódicas incluso si no hay cambios
+          // Cada 5 comprobaciones (aprox. 10 minutos) enviar un mensaje de estado
+          if (taskInfo.checkCount % 5 === 0) {
+            await ctx.reply(`Monitoreo activo: NSW2 sigue ${available ? 'disponible ✅' : 'no disponible ❌'} - Check #${taskInfo.checkCount}`)
+          }
+
+          // Garantizar capturas de pantalla regulares: cada 15 comprobaciones (30 min) O cada 60 minutos forzosamente
+          const shouldTakeScreenshot =
+            (taskInfo.checkCount % 15 === 0) ||
+            (minutesSinceStart > 0 && minutesSinceStart % 60 === 0)
+
+          if (shouldTakeScreenshot && !screenshotTaken) {
+            await ctx.reply(`Actualización periódica - NSW2 sigue ${available ? 'disponible ✅' : 'no disponible ❌'}`)
+
+            // Tomar captura
+            const { getByScraper } = await import('../../extractor/controller.js')
+            const screenshotResult = await getByScraper(targetUrl)
+
+            if (screenshotResult.screenshotBuffer) {
+              await ctx.replyWithPhoto(new InputFile(screenshotResult.screenshotBuffer, 'NSW2_screenshot.png'), {
+                caption: `Estado actual: ${available ? 'Disponible' : 'No disponible'} - Actualización periódica`
+              })
+              screenshotTaken = true
+            }
+          }
+        }
+
+        // Agregar el último momento en que se envió una captura
+        if (screenshotTaken) {
+          taskInfo.lastScreenshotTime = currentTime
+        }
+
+        // Si han pasado más de 2 horas desde la última captura, forzar una nueva
+        if (taskInfo.lastScreenshotTime &&
+          (currentTime - taskInfo.lastScreenshotTime) > (2 * 60 * 60 * 1000) &&
+          !screenshotTaken) {
+          logger.info(`Forzando captura después de 2+ horas sin enviar para el chat ${chatId}`)
+          await ctx.reply(`⏰ Actualización de seguridad: Comprobando NSW2 ${available ? '(actualmente disponible)' : '(actualmente no disponible)'}...`)
+
+          // Tomar captura forzada
+          const { getByScraper } = await import('../../extractor/controller.js')
+          const screenshotResult = await getByScraper(targetUrl)
+
+          if (screenshotResult.screenshotBuffer) {
+            await ctx.replyWithPhoto(new InputFile(screenshotResult.screenshotBuffer, 'NSW2_screenshot.png'), {
+              caption: `Estado actual: ${available ? 'Disponible' : 'No disponible'} - Actualización de seguridad (2h sin capturas)`
+            })
+            taskInfo.lastScreenshotTime = currentTime
+          }
+        }
+
+        // Actualizar estado SIEMPRE después de cada comprobación
+        taskInfo.lastStatus = available
+        activeCronTasks.set(chatId, taskInfo)
+      } catch (error) {
+        logger.error(`Error en comprobación programada: ${error.message}`)
+        await ctx.reply('Error al comprobar disponibilidad. El monitoreo continúa...')
+      }
+    }
+
+    // Ejecutar la primera comprobación inmediatamente
+    await checkAvailability()
+
+    // Programar comprobaciones automáticas cada 2 minutos
+    const interval = setInterval(checkAvailability, 2 * 60 * 1000)
+
+    // Actualizar la tarea con el intervalo
+    const taskInfo = activeCronTasks.get(chatId)
+    taskInfo.interval = interval
+    activeCronTasks.set(chatId, taskInfo)
+  })
+
+  // Comando para detener el monitoreo
+  bot.command('stopcron', async (ctx) => {
+    const chatId = ctx.chat.id
+    const username = ctx.message.from.username || ctx.message.from.first_name
+
+    logger.info(`Comando /stopcron recibido de ${username}`)
+
+    if (activeCronTasks.has(chatId)) {
+      // Detener el intervalo
+      clearInterval(activeCronTasks.get(chatId).interval)
+
+      // Calcular tiempo de ejecución
+      const startTime = activeCronTasks.get(chatId).startTime
+      const runTime = formatTimeDifference(new Date() - startTime)
+
+      // Eliminar la tarea
+      activeCronTasks.delete(chatId)
+
+      await ctx.reply(`Monitoreo automático detenido. Estuvo activo durante ${runTime}.`)
+    } else {
+      await ctx.reply('No hay ningún monitoreo activo para detener.')
+    }
+  })
+}
+
+/**
+ * Formatea la diferencia de tiempo en formato legible
+ * @param {number} ms - Diferencia de tiempo en milisegundos
+ * @returns {string} - Tiempo formateado
+ */
+function formatTimeDifference (ms) {
+  const seconds = Math.floor(ms / 1000)
+  const minutes = Math.floor(seconds / 60)
+  const hours = Math.floor(minutes / 60)
+
+  if (hours > 0) {
+    return `${hours}h ${minutes % 60}m`
+  } else if (minutes > 0) {
+    return `${minutes}m ${seconds % 60}s`
+  } else {
+    return `${seconds}s`
+  }
 }
 
 /**
@@ -122,12 +344,10 @@ export function setupSeeNSW2CommandListener (bot) {
  * @returns {boolean} - True si parece una URL válida
  */
 function isValidUrl (string) {
-  try {
-    new URL(string)
+  if (URL.canParse(string)) {
     return true
-  } catch (_) {
-    return false
   }
+  return false
 }
 
 /**
