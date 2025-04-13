@@ -4,7 +4,8 @@ import {
   setupStartCommandListener,
   setupHelpCommandListener,
   setupPingCommandListener,
-  setupMediaListener
+  setupMediaListener,
+  setupSeeNSW2CommandListener
 } from '../utils/bot-listeners.utils.js'
 
 /**
@@ -29,6 +30,7 @@ export function initBot () {
     setupHelpCommandListener(bot)
     setupPingCommandListener(bot)
     setupMediaListener(bot)
+    setupSeeNSW2CommandListener(bot) // Registrar el nuevo listener
     // setupMessageListener(bot)
 
     // Iniciar el bot
@@ -57,6 +59,30 @@ export async function sendBotMessage (chatId, message) {
     return true
   } catch (error) {
     console.error('Error sending message:', error)
+    return false
+  }
+}
+
+/**
+ * Envía una foto a través del bot de Telegram
+ * @param {String} chatId - ID del chat al que se enviará la foto
+ * @param {String} photoPath - Ruta de la foto a enviar
+ * @param {String} caption - Descripción opcional para la foto
+ * @returns {Promise<Boolean>} - Indica si el envío fue exitoso
+ */
+export async function sendBotPhoto (chatId, photoPath, caption = '') {
+  if (!telegramBot.isInitialized()) {
+    console.error('Bot no inicializado')
+    return false
+  }
+
+  try {
+    await telegramBot.getInstance().api.sendPhoto(chatId, photoPath, {
+      caption
+    })
+    return true
+  } catch (error) {
+    console.error('Error sending photo:', error)
     return false
   }
 }
