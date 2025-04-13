@@ -1,7 +1,9 @@
 import e from 'express'
 import { initBot } from './modules/telegram/services/telegram.service.js'
+
 import telegramRoutes from './modules/telegram/routes.js'
 import logsRoutes from './modules/logs/routes.js'
+import extractorRoutes from './modules/extractor/routes.js'
 
 const app = e()
 
@@ -15,6 +17,9 @@ app.get('/', (_req, res) => {
 
 // Rutas de Telegram
 app.use('/telegram', telegramRoutes)
+
+// Rutas de Extractor
+app.use('/extractor', extractorRoutes)
 
 // Rutas de Logs
 app.use('/logs', logsRoutes)
