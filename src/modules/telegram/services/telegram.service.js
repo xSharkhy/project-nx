@@ -1,6 +1,6 @@
 import telegramBot from '../entities/bot.entity.js'
 import {
-  setupMessageListener,
+  // setupMessageListener,
   setupStartCommandListener,
   setupHelpCommandListener,
   setupPingCommandListener,
@@ -29,7 +29,7 @@ export function initBot () {
     setupHelpCommandListener(bot)
     setupPingCommandListener(bot)
     setupMediaListener(bot)
-    setupMessageListener(bot)
+    // setupMessageListener(bot)
 
     // Iniciar el bot
     bot.start()
