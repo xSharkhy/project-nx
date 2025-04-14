@@ -1,13 +1,6 @@
 import telegramBot from '../entities/bot.entity.js'
-import {
-  // setupMessageListener,
-  setupStartCommandListener,
-  setupHelpCommandListener,
-  setupPingCommandListener,
-  setupMediaListener,
-  setupSeeNSW2CommandListener,
-  setupCronSeeNSW2CommandListener
-} from '../utils/bot-listeners.utils.js'
+import commandManager from '../commands/index.js'
+import { setupMediaListener } from '../utils/bot-listeners.utils.js'
 
 /**
  * Inicializa el bot de Telegram con el token de las variables de entorno
@@ -26,14 +19,11 @@ export function initBot () {
   if (initialized) {
     const bot = telegramBot.getInstance()
 
-    // Configurar los listeners del bot
-    setupStartCommandListener(bot)
-    setupHelpCommandListener(bot)
-    setupPingCommandListener(bot)
+    // Configurar los comandos usando el gestor de comandos
+    commandManager.setupCommands(bot)
+
+    // Configurar los listeners para medios (fotos, documentos, etc.)
     setupMediaListener(bot)
-    setupSeeNSW2CommandListener(bot)
-    setupCronSeeNSW2CommandListener(bot) // Registrar el nuevo listener de monitoreo
-    // setupMessageListener(bot)
 
     // Iniciar el bot
     bot.start()
